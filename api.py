@@ -11,7 +11,7 @@ app = FastAPI()
 
 # --- CORS setup ---
 origins = [
-    "http://localhost:4028",  # React dev server
+    "https://heritage-bites.vercel.app",  # React dev server
     "http://127.0.0.1:4028"
 ]
 
