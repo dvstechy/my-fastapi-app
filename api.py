@@ -76,9 +76,11 @@ def predict_sentiment(feedback: FeedbackText):
 
     # --- Predict ---
     probs = model.predict_proba(X)[0]
-    label_from_model = model.predict(X)[0]
-    label_index = list(model.classes_).index(label_from_model)
-    text_score = float(probs[label_index])  # text-based probability
+    label = model.predict(X)[0]
+
+    label_index = list(model.classes_).index(label)
+    text_score = float(probs[label_index])
+  # text-based probability
 
     # --- Use ratings if provided to adjust label ---
     ratings = [
