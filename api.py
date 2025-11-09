@@ -59,11 +59,18 @@ def predict_sentiment(feedback: FeedbackText):
     except Exception as e:
         return {"error": str(e)}
 
-    # --- Clean and vectorize text ---
-    cleaned_text = clean_text(feedback.text)
+    # --- Combine all section reviews like training ---
+    combined_text = " ".join([
+        feedback.e_market_review or "",
+        feedback.recipe_review or "",
+        feedback.chatbot_review or "",
+        feedback.contribution_review or "",
+        feedback.overall_review or ""
+    ])
+
+    cleaned_text = clean_text(combined_text)
     X = vectorizer.transform([cleaned_text])
 
-    # --- Model prediction ---
     probs = model.predict_proba(X)[0]
     label = model.predict(X)[0]
 
@@ -82,16 +89,15 @@ def predict_sentiment(feedback: FeedbackText):
 
     if ratings:
         avg_rating = np.mean(ratings)
-        # Override label based on rating thresholds
-        if avg_rating <= 2:
+        if avg_rating < 3:
             label = "negative"
-            score = max(score, 0.85)  # assign high confidence
-        elif avg_rating >= 4:
+            score = max(score, 0.85)
+        elif avg_rating > 3.5:
             label = "positive"
             score = max(score, 0.85)
         else:
             label = "neutral"
-            score = max(score, 0.6)  # medium confidence
+            score = max(score, 0.6)
 
     return {
         "sentiment_label": label,
