@@ -98,9 +98,7 @@ def predict_sentiment(feedback: FeedbackText):
     # Convert average rating (1-5) to 0-1 scale
         rating_score = (avg_rating - 1) / 4  # 1 → 0, 5 → 1
     # Combine with text-based score (weighted average)
-        final_score = 0.7 * text_score + 0.3 * rating_score 
-    else:
-        final_score = text_score
+final_score = 0.7 * text_score + 0.3 * rating_score 
 
 # Determine final label based on combined_score thresholds
     if final_score < 0.45:
