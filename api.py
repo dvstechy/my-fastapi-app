@@ -97,6 +97,8 @@ def predict_sentiment(feedback: FeedbackText):
         avg_rating = np.mean(ratings)
     # Convert average rating (1-5) to 0-1 scale
         rating_score = (avg_rating - 1) / 4  # 1 → 0, 5 → 1
+    else:
+        rating_score = 0
     # Combine with text-based score (weighted average)
 
     final_score = 0.7 * text_score + 0.3 * rating_score 
