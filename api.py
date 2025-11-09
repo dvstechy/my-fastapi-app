@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import joblib, os
-import re
+import joblib, os, re
+import numpy as np
 
 app = FastAPI()
 
@@ -19,12 +19,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Define request model ---
+# --- Request model ---
 class FeedbackText(BaseModel):
     text: str
     user_type: str  # "User" or "Farmer"
+    # Optional: include numeric ratings if available
+    e_market_rating: int = None
+    recipe_rating: int = None
+    chatbot_rating: int = None
+    contribution_rating: int = None
+    overall_rating: int = None
 
-# --- Helper: load model + vectorizer based on user_type ---
+# --- Load model + vectorizer ---
 def load_role_model(user_type: str):
     user_type = user_type.lower()
     if user_type == "user":
@@ -35,16 +41,16 @@ def load_role_model(user_type: str):
         vectorizer_path = "backend/models/tfidf_vectorizer_farmer.pkl"
     else:
         raise ValueError("Invalid user_type. Must be 'User' or 'Farmer'.")
-
     model = joblib.load(model_path)
     vectorizer = joblib.load(vectorizer_path)
     return model, vectorizer
 
-
-def clean_text(text):
+# --- Preprocess text ---
+def clean_text(text: str):
     text = re.sub(r"[^a-zA-Z\s]", "", text)
     text = text.lower().strip()
     return text
+
 # --- Prediction Endpoint ---
 @app.post("/predict-sentiment")
 def predict_sentiment(feedback: FeedbackText):
@@ -53,19 +59,39 @@ def predict_sentiment(feedback: FeedbackText):
     except Exception as e:
         return {"error": str(e)}
 
-    # --- Clean text before vectorizing ---
+    # --- Clean and vectorize text ---
     cleaned_text = clean_text(feedback.text)
     X = vectorizer.transform([cleaned_text])
 
+    # --- Model prediction ---
     probs = model.predict_proba(X)[0]
     label = model.predict(X)[0]
 
     label_index = list(model.classes_).index(label)
     score = float(probs[label_index])
 
-    # Neutral buffer (optional)
-    if 0.45 < score < 0.55:
-        label = "neutral"
+    # --- Combine with ratings to override obvious cases ---
+    ratings = [
+        feedback.e_market_rating,
+        feedback.recipe_rating,
+        feedback.chatbot_rating,
+        feedback.contribution_rating,
+        feedback.overall_rating
+    ]
+    ratings = [r for r in ratings if r is not None]
+
+    if ratings:
+        avg_rating = np.mean(ratings)
+        # Override label based on rating thresholds
+        if avg_rating <= 2:
+            label = "negative"
+            score = max(score, 0.85)  # assign high confidence
+        elif avg_rating >= 4:
+            label = "positive"
+            score = max(score, 0.85)
+        else:
+            label = "neutral"
+            score = max(score, 0.6)  # medium confidence
 
     return {
         "sentiment_label": label,
