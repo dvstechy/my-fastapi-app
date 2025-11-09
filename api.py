@@ -76,10 +76,9 @@ def predict_sentiment(feedback: FeedbackText):
 
     # --- Predict ---
     probs = model.predict_proba(X)[0]
-    label = model.predict(X)[0]
-
-    label_index = list(model.classes_).index(label)
-    score = float(probs[label_index])
+    label_from_model = model.predict(X)[0]
+    label_index = list(model.classes_).index(label_from_model)
+    text_score = float(probs[label_index])  # text-based probability
 
     # --- Use ratings if provided to adjust label ---
     ratings = [
@@ -99,21 +98,18 @@ def predict_sentiment(feedback: FeedbackText):
     # Combine with text-based score (weighted average)
         combined_score = 0.7 * score + 0.3 * rating_score
     else:
-        combined_score = score
+        final_score = text_score
 
 # Determine final label based on combined_score thresholds
-    if combined_score < 0.4:
+    if final_score < 0.45:
         label = "negative"
-    elif combined_score > 0.6:
-        label = "positive"
-    else:
+    elif 0.45 <= final_score <= 0.55:
         label = "neutral"
-
-    score = round(combined_score, 4)
-
+    else:
+        label = "positive"
 
     return {
         "sentiment_label": label,
-        "sentiment_score": round(score, 4),
+        "sentiment_score": round(final_score, 4),
         "model_used": feedback.user_type.capitalize()
     }
