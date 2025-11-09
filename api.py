@@ -91,17 +91,26 @@ def predict_sentiment(feedback: FeedbackText):
     ]
     ratings = [r for r in ratings if r is not None]
 
+    # --- Use ratings to influence the score (without overwriting model prediction) ---
     if ratings:
         avg_rating = np.mean(ratings)
-        if avg_rating < 3:
-            label = "negative"
-            score = max(score, 0.85)
-        elif avg_rating > 3.5:
-            label = "positive"
-            score = max(score, 0.85)
-        else:
-            label = "neutral"
-            score = max(score, 0.6)
+    # Convert average rating (1-5) to 0-1 scale
+        rating_score = (avg_rating - 1) / 4  # 1 → 0, 5 → 1
+    # Combine with text-based score (weighted average)
+        combined_score = 0.7 * score + 0.3 * rating_score
+    else:
+        combined_score = score
+
+# Determine final label based on combined_score thresholds
+    if combined_score < 0.4:
+        label = "negative"
+    elif combined_score > 0.6:
+        label = "positive"
+    else:
+        label = "neutral"
+
+    score = round(combined_score, 4)
+
 
     return {
         "sentiment_label": label,
