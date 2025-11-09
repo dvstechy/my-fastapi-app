@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import joblib, os
+import re
 
 app = FastAPI()
 
@@ -39,6 +40,11 @@ def load_role_model(user_type: str):
     vectorizer = joblib.load(vectorizer_path)
     return model, vectorizer
 
+
+def clean_text(text):
+    text = re.sub(r"[^a-zA-Z\s]", "", text)
+    text = text.lower().strip()
+    return text
 # --- Prediction Endpoint ---
 @app.post("/predict-sentiment")
 def predict_sentiment(feedback: FeedbackText):
@@ -47,15 +53,17 @@ def predict_sentiment(feedback: FeedbackText):
     except Exception as e:
         return {"error": str(e)}
 
-    X = vectorizer.transform([feedback.text])
+    # --- Clean text before vectorizing ---
+    cleaned_text = clean_text(feedback.text)
+    X = vectorizer.transform([cleaned_text])
+
     probs = model.predict_proba(X)[0]
     label = model.predict(X)[0]
 
-    # Find correct score
     label_index = list(model.classes_).index(label)
     score = float(probs[label_index])
 
-    # Neutral buffer
+    # Neutral buffer (optional)
     if 0.45 < score < 0.55:
         label = "neutral"
 
