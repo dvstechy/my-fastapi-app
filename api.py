@@ -1,8 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import joblib, os
-import re
+import joblib, re, numpy as np
 
 app = FastAPI()
 
@@ -11,6 +10,7 @@ origins = [
     "https://heritage-bites.vercel.app",
     "http://localhost:4028",
 ]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -19,12 +19,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# --- Define request model ---
+# --- Request model with optional fields ---
 class FeedbackText(BaseModel):
-    text: str
     user_type: str  # "User" or "Farmer"
+    text: str = ""  # fallback single text
+    e_market_review: str = ""
+    recipe_review: str = ""
+    chatbot_review: str = ""
+    contribution_review: str = ""
+    overall_review: str = ""
+    e_market_rating: int = None
+    recipe_rating: int = None
+    chatbot_rating: int = None
+    contribution_rating: int = None
+    overall_rating: int = None
 
-# --- Helper: load model + vectorizer based on user_type ---
+# --- Load model + vectorizer ---
 def load_role_model(user_type: str):
     user_type = user_type.lower()
     if user_type == "user":
@@ -35,17 +45,16 @@ def load_role_model(user_type: str):
         vectorizer_path = "backend/models/tfidf_vectorizer_farmer.pkl"
     else:
         raise ValueError("Invalid user_type. Must be 'User' or 'Farmer'.")
-
     model = joblib.load(model_path)
     vectorizer = joblib.load(vectorizer_path)
     return model, vectorizer
 
-
-def clean_text(text):
+# --- Clean text function ---
+def clean_text(text: str):
     text = re.sub(r"[^a-zA-Z\s]", "", text)
-    text = text.lower().strip()
-    return text
-# --- Prediction Endpoint ---
+    return text.lower().strip()
+
+# --- Prediction endpoint ---
 @app.post("/predict-sentiment")
 def predict_sentiment(feedback: FeedbackText):
     try:
@@ -53,19 +62,46 @@ def predict_sentiment(feedback: FeedbackText):
     except Exception as e:
         return {"error": str(e)}
 
-    # --- Clean text before vectorizing ---
-    cleaned_text = clean_text(feedback.text)
+    # --- Combine reviews safely ---
+    combined_text = " ".join([
+        feedback.text,
+        feedback.e_market_review,
+        feedback.recipe_review,
+        feedback.chatbot_review,
+        feedback.contribution_review,
+        feedback.overall_review
+    ])
+    cleaned_text = clean_text(combined_text)
     X = vectorizer.transform([cleaned_text])
 
+    # --- Predict ---
     probs = model.predict_proba(X)[0]
     label = model.predict(X)[0]
 
     label_index = list(model.classes_).index(label)
     score = float(probs[label_index])
 
-    # Neutral buffer (optional)
-    if 0.45 < score < 0.55:
-        label = "neutral"
+    # --- Use ratings if provided to adjust label ---
+    ratings = [
+        feedback.e_market_rating,
+        feedback.recipe_rating,
+        feedback.chatbot_rating,
+        feedback.contribution_rating,
+        feedback.overall_rating
+    ]
+    ratings = [r for r in ratings if r is not None]
+
+    if ratings:
+        avg_rating = np.mean(ratings)
+        if avg_rating < 3:
+            label = "negative"
+            score = max(score, 0.85)
+        elif avg_rating > 3.5:
+            label = "positive"
+            score = max(score, 0.85)
+        else:
+            label = "neutral"
+            score = max(score, 0.6)
 
     return {
         "sentiment_label": label,
